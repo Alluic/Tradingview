@@ -1,0 +1,18 @@
+[project]
+name = "tradingview-signal-dashboard"
+version = "0.1.0"
+description = "Research dashboard for TradingView breadth signals and manual ETF allocation guidance."
+requires-python = ">=3.11"
+dependencies = [
+  "pandas>=2.2",
+  "numpy>=2.0",
+  "duckdb>=1.0",
+  "PyYAML>=6.0",
+  "yfinance>=0.2",
+  "streamlit>=1.40",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q"

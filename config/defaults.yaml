@@ -1,0 +1,73 @@
+database_path: data/tradingview_signals.duckdb
+data_dir: data
+
+auto_data:
+  enabled: true
+  source: sp500_wikipedia_yfinance
+  start_date: "2014-01-01"
+  end_date: null
+  max_universe_symbols: 250
+  chunk_size: 75
+
+signals:
+  default: MMTW
+  symbols:
+    - MMFD
+    - MMTW
+    - MMFI
+    - MMOH
+    - MMOF
+    - MMTH
+  moving_average_days:
+    MMFD: 5
+    MMTW: 20
+    MMFI: 50
+    MMOH: 100
+    MMOF: 150
+    MMTH: 200
+  descriptions:
+    MMFD: "Percent of stocks above 5-day moving average"
+    MMTW: "Percent of stocks above 20-day moving average"
+    MMFI: "Percent of stocks above 50-day moving average"
+    MMOH: "Percent of stocks above 100-day moving average"
+    MMOF: "Percent of stocks above 150-day moving average"
+    MMTH: "Percent of stocks above 200-day moving average"
+
+zscore:
+  window: 756
+  min_periods: 756
+  trigger_threshold: -1.0
+
+backtest:
+  start_date: null
+  end_date: null
+  execution_lag_days: 1
+  research_hold_weeks: 8
+  forward_return_weeks:
+    - 4
+    - 8
+    - 12
+
+allocation:
+  default_cash: 10000
+  trigger_deploy_pct: 1.0
+  etf_weights:
+    VTI: 0.40
+    SPY: 0.25
+    QQQ: 0.25
+    IWM: 0.10
+
+alerts:
+  enabled: true
+  signal_symbols: []
+  send_on_cross_below_only: true
+  schedule_time: "18:00"
+  email_subject_prefix: "TradingView Breadth Alert"
+  smtp:
+    host_env: "TV_ALERT_SMTP_HOST"
+    port_env: "TV_ALERT_SMTP_PORT"
+    username_env: "TV_ALERT_SMTP_USERNAME"
+    password_env: "TV_ALERT_SMTP_PASSWORD"
+    from_env: "TV_ALERT_EMAIL_FROM"
+    to_env: "TV_ALERT_EMAIL_TO"
+    use_tls_env: "TV_ALERT_SMTP_USE_TLS"
