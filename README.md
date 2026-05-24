@@ -51,7 +51,7 @@ Set email settings as user environment variables:
 [Environment]::SetEnvironmentVariable("TV_ALERT_SMTP_USERNAME", "your_email@gmail.com", "User")
 [Environment]::SetEnvironmentVariable("TV_ALERT_SMTP_PASSWORD", "your_app_password", "User")
 [Environment]::SetEnvironmentVariable("TV_ALERT_EMAIL_FROM", "your_email@gmail.com", "User")
-[Environment]::SetEnvironmentVariable("TV_ALERT_EMAIL_TO", "destination_email@example.com", "User")
+[Environment]::SetEnvironmentVariable("TV_ALERT_EMAIL_TO", "jciulla55@gmail.com", "User")
 [Environment]::SetEnvironmentVariable("TV_ALERT_SMTP_USE_TLS", "true", "User")
 ```
 
