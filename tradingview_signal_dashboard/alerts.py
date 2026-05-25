@@ -13,6 +13,8 @@ from tradingview_signal_dashboard.indicators import add_signal_zscores
 class SignalAlert:
     alert_key: str
     symbol: str
+    direction: str
+    threshold: float
     signal_date: pd.Timestamp
     close: float
     z_score: float
@@ -46,44 +48,51 @@ def latest_signal_alerts(signals: pd.DataFrame, config: AppConfig) -> list[Signa
         previous = rows.iloc[-2] if len(rows) > 1 else None
         z_score = float(latest["z_score"])
         previous_z_score = None if previous is None else float(previous["z_score"])
-        if z_score >= config.zscore.trigger_threshold:
-            continue
-        if (
-            config.alerts.send_on_cross_below_only
-            and previous_z_score is not None
-            and previous_z_score < config.zscore.trigger_threshold
-        ):
-            continue
-
-        allocation = allocation_preview(
-            cash=config.allocation.default_cash,
-            latest_z_score=z_score,
-            threshold=config.zscore.trigger_threshold,
-            etf_weights=config.allocation.etf_weights,
-            deploy_pct=config.allocation.trigger_deploy_pct,
-        )
         signal_date = pd.Timestamp(latest["date"])
-        alerts.append(
-            SignalAlert(
-                alert_key=f"{symbol}:{signal_date.date()}:{config.zscore.trigger_threshold}",
-                symbol=symbol,
-                signal_date=signal_date,
-                close=float(latest["close"]),
-                z_score=z_score,
-                previous_z_score=previous_z_score,
-                allocation=allocation,
-            )
-        )
+        for threshold in sorted(config.alerts.zscore_thresholds):
+            for direction, signed_threshold in (("above", threshold), ("below", -threshold)):
+                if direction == "above":
+                    triggered = z_score >= signed_threshold
+                    already_triggered = previous_z_score is not None and previous_z_score >= signed_threshold
+                else:
+                    triggered = z_score <= signed_threshold
+                    already_triggered = previous_z_score is not None and previous_z_score <= signed_threshold
+
+                if not triggered:
+                    continue
+                if config.alerts.send_on_cross_only and already_triggered:
+                    continue
+
+                allocation = allocation_preview(
+                    cash=config.allocation.default_cash,
+                    latest_z_score=z_score,
+                    threshold=-threshold,
+                    etf_weights=config.allocation.etf_weights,
+                    deploy_pct=config.allocation.trigger_deploy_pct,
+                )
+                alerts.append(
+                    SignalAlert(
+                        alert_key=f"{symbol}:{signal_date.date()}:{direction}:{threshold}",
+                        symbol=symbol,
+                        direction=direction,
+                        threshold=threshold,
+                        signal_date=signal_date,
+                        close=float(latest["close"]),
+                        z_score=z_score,
+                        previous_z_score=previous_z_score,
+                        allocation=allocation,
+                    )
+                )
     return alerts
 
 
 def format_alert_email(alerts: list[SignalAlert], config: AppConfig) -> tuple[str, str]:
-    symbols = ", ".join(alert.symbol for alert in alerts)
+    symbols = ", ".join(f"{alert.symbol} {alert.direction} {alert.threshold:g}σ" for alert in alerts)
     subject = f"{config.alerts.email_subject_prefix}: {symbols}"
     sections = [
-        "A market breadth z-score trigger is active.",
+        "Market breadth z-score trigger(s) are active.",
         "",
-        f"Trigger rule: z-score < {config.zscore.trigger_threshold}",
+        f"Alert thresholds: {', '.join(f'+/-{threshold:g}' for threshold in config.alerts.zscore_thresholds)}",
         f"Default deploy cash: ${config.allocation.default_cash:,.2f}",
         "",
     ]
@@ -92,16 +101,20 @@ def format_alert_email(alerts: list[SignalAlert], config: AppConfig) -> tuple[st
             [
                 f"{alert.symbol}",
                 f"  Signal date: {alert.signal_date.date()}",
+                f"  Trigger: z-score {alert.direction} {'+' if alert.direction == 'above' else '-'}{alert.threshold:g}",
                 f"  Breadth close: {alert.close:.2f}",
                 f"  Z-score: {alert.z_score:.2f}",
                 f"  Previous z-score: {'n/a' if alert.previous_z_score is None else f'{alert.previous_z_score:.2f}'}",
-                "  Suggested allocation:",
             ]
         )
-        for _, row in alert.allocation.iterrows():
-            sections.append(
-                f"    {row['symbol']}: {row['weight']:.0%} / ${row['allocation_dollars']:,.2f}"
-            )
+        if alert.direction == "below":
+            sections.append("  Suggested allocation:")
+            for _, row in alert.allocation.iterrows():
+                sections.append(
+                    f"    {row['symbol']}: {row['weight']:.0%} / ${row['allocation_dollars']:,.2f}"
+                )
+        else:
+            sections.append("  Allocation note: positive z-score alert; no buy allocation is generated.")
         sections.append("")
     sections.append("Execution remains manual in Fidelity.")
     return subject, "\n".join(sections)

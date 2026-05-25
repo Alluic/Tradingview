@@ -59,8 +59,16 @@ allocation:
 
 alerts:
   enabled: true
-  signal_symbols: []
-  send_on_cross_below_only: true
+  signal_symbols:
+    - MMTW
+    - MMFI
+    - MMOH
+    - MMTH
+  zscore_thresholds:
+    - 1.0
+    - 1.5
+    - 2.0
+  send_on_cross_only: true
   schedule_time: "18:00"
   email_subject_prefix: "TradingView Breadth Alert"
   smtp:

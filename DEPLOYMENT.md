@@ -15,6 +15,15 @@ Host the dashboard with Streamlit Community Cloud:
 
 The dashboard builds its own public-data breadth signals on startup if the local database is empty. The hosted Streamlit app is for viewing research; scheduled email alerts should run through GitHub Actions.
 
+For local viewing:
+
+```powershell
+cd "C:\Users\ciull\Desktop\Coding Projects\Trading View"
+streamlit run app.py
+```
+
+Then open `http://localhost:8501`.
+
 ## Scheduled Email Alerts
 
 GitHub Actions workflow:
@@ -24,6 +33,14 @@ GitHub Actions workflow:
 ```
 
 It runs weekdays at `22:15 UTC`, which is `6:15 PM Eastern` during daylight saving time. During standard time, change the cron line to `15 23 * * 1-5` if you want the run to remain near 6:15 PM Eastern.
+
+Alert rules:
+
+```text
+Signals: MMTW, MMFI, MMOH, MMTH
+Thresholds: +/-1.0, +/-1.5, +/-2.0
+Email behavior: send only when a signal crosses a threshold
+```
 
 Add these repository secrets in GitHub:
 

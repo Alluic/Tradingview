@@ -59,7 +59,8 @@ class SmtpEnvConfig:
 class AlertConfig:
     enabled: bool
     signal_symbols: tuple[str, ...]
-    send_on_cross_below_only: bool
+    zscore_thresholds: tuple[float, ...]
+    send_on_cross_only: bool
     schedule_time: str
     email_subject_prefix: str
     smtp: SmtpEnvConfig
@@ -146,7 +147,8 @@ def load_config(path: str | Path = DEFAULT_CONFIG_PATH) -> AppConfig:
         alerts=AlertConfig(
             enabled=bool(alerts_raw["enabled"]),
             signal_symbols=tuple(str(symbol).upper() for symbol in alerts_raw.get("signal_symbols", [])),
-            send_on_cross_below_only=bool(alerts_raw["send_on_cross_below_only"]),
+            zscore_thresholds=tuple(float(threshold) for threshold in alerts_raw["zscore_thresholds"]),
+            send_on_cross_only=bool(alerts_raw["send_on_cross_only"]),
             schedule_time=str(alerts_raw["schedule_time"]),
             email_subject_prefix=str(alerts_raw["email_subject_prefix"]),
             smtp=SmtpEnvConfig(

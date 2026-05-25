@@ -7,7 +7,7 @@ GitHub target: `https://github.com/Alluic/Tradingview`. See [DEPLOYMENT.md](DEPL
 The first rule is intentionally simple:
 
 ```text
-generate an allocation signal when rolling_z_score < -1.0
+send alerts when rolling_z_score crosses +/-1.0, +/-1.5, or +/-2.0
 ```
 
 Signals are evaluated on weekly closes. Backtests execute on the next available ETF trading day and rank candidate breadth signals by risk-adjusted performance.
@@ -25,6 +25,12 @@ streamlit run app.py
 
 Running `python app.py` also delegates to Streamlit automatically, so IDE run buttons work.
 
+After Streamlit starts, open the Local URL it prints, usually:
+
+```text
+http://localhost:8501
+```
+
 From the parent `Coding Projects` folder:
 
 ```powershell
@@ -41,7 +47,21 @@ You can also run:
 
 ## Automatic Email Alerts
 
-The headless alert runner refreshes market data, recomputes z-scores, and sends one email per new trigger date when a signal crosses below the configured threshold.
+The headless alert runner refreshes market data, recomputes z-scores, and sends one email per new trigger date when one of the monitored signals crosses a configured threshold.
+
+Monitored alert signals:
+
+- `MMTW`: Percent of stocks above 20-day moving average
+- `MMFI`: Percent of stocks above 50-day moving average
+- `MMOH`: Percent of stocks above 100-day moving average
+- `MMTH`: Percent of stocks above 200-day moving average
+
+Alert thresholds:
+
+```text
+z-score crosses above +1.0, +1.5, or +2.0
+z-score crosses below -1.0, -1.5, or -2.0
+```
 
 Set email settings as user environment variables:
 
@@ -100,7 +120,8 @@ If TradingView omits the `symbol` column, name each export after the signal, for
 - Candidate breadth symbols: `MMFD`, `MMTW`, `MMFI`, `MMOH`, `MMOF`, `MMTH`.
 - Default visible signal: `MMTW`.
 - Rolling z-score window: 756 trading days.
-- Trigger threshold: `< -1.0`.
+- Dashboard allocation preview threshold: `< -1.0`.
+- Email alert thresholds: `+/-1.0`, `+/-1.5`, `+/-2.0` for `MMTW`, `MMFI`, `MMOH`, and `MMTH`.
 - ETF basket: `40% VTI`, `25% SPY`, `25% QQQ`, `10% IWM`.
 - Research ranking uses an 8-week tactical exposure window after each trigger so Sharpe, Sortino, and drawdown are comparable across signals.
 

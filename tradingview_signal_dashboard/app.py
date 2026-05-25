@@ -396,6 +396,7 @@ def main() -> None:
         index=1,
     )
     st.sidebar.write(f"Trigger: z-score < {config.zscore.trigger_threshold}")
+    st.sidebar.write(f"Alerts: {', '.join(f'+/-{threshold:g}' for threshold in config.alerts.zscore_thresholds)}")
     st.sidebar.write(f"Window: {config.zscore.window} trading days")
 
     if page == "Data":

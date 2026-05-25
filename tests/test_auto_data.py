@@ -10,6 +10,8 @@ def test_config_loads_automated_signal_settings():
     assert config.auto_data.enabled is True
     assert config.signals.moving_average_days["MMTW"] == 20
     assert config.signals.descriptions["MMTW"] == "Percent of stocks above 20-day moving average"
+    assert config.alerts.signal_symbols == ("MMTW", "MMFI", "MMOH", "MMTH")
+    assert config.alerts.zscore_thresholds == (1.0, 1.5, 2.0)
 
 
 def test_compute_breadth_signals_percent_above_average():
