@@ -48,7 +48,7 @@ def test_format_alert_email_includes_allocation():
 
     assert "MMTW" in subject
     assert "Suggested allocation" in body
-    assert "Execution remains manual" in body
+    assert "Broker execution remains manual" in body
 
 
 def test_latest_signal_alerts_detects_cross_above_thresholds():

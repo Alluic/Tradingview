@@ -388,7 +388,7 @@ def main() -> None:
     _ensure_automated_data(conn, config)
 
     st.title("TradingView Signal Research")
-    st.caption("Research breadth-signal z-scores before using them for manual Fidelity allocation decisions.")
+    st.caption("Research breadth-signal z-scores before using them for manual broker allocation decisions.")
 
     page = st.sidebar.radio(
         "Page",

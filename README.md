@@ -1,8 +1,6 @@
 # TradingView Signal Research Dashboard
 
-Research-first dashboard for testing market-breadth signals as manual ETF allocation signals.
-
-GitHub target: `https://github.com/Alluic/Tradingview`. See [DEPLOYMENT.md](DEPLOYMENT.md) for Streamlit Cloud and GitHub Actions setup.
+Research-first dashboard for testing market-breadth signals as manual ETF allocation signals. See [DEPLOYMENT.md](DEPLOYMENT.md) for Streamlit Cloud and GitHub Actions setup.
 
 The first rule is intentionally simple:
 
@@ -17,7 +15,6 @@ Signals are evaluated on weekly closes. Backtests execute on the next available 
 From this project folder:
 
 ```powershell
-cd "C:\Users\ciull\Desktop\Coding Projects\Trading View"
 pip install -r requirements.txt
 pytest
 streamlit run app.py
@@ -31,18 +28,18 @@ After Streamlit starts, open the Local URL it prints, usually:
 http://localhost:8501
 ```
 
-From the parent `Coding Projects` folder:
+From the parent folder:
 
 ```powershell
-python -m pip install -r "Trading View\requirements.txt"
-python -m pytest "Trading View"
-python -m streamlit run "Trading View\app.py"
+python -m pip install -r "<project-folder>\requirements.txt"
+python -m pytest "<project-folder>"
+python -m streamlit run "<project-folder>\app.py"
 ```
 
 You can also run:
 
 ```powershell
-& ".\Trading View\run_dashboard.ps1"
+.\run_dashboard.ps1
 ```
 
 ## Automatic Email Alerts
@@ -66,26 +63,24 @@ z-score crosses below -1.0, -1.5, or -2.0
 Set email settings as user environment variables:
 
 ```powershell
-[Environment]::SetEnvironmentVariable("TV_ALERT_SMTP_HOST", "smtp.gmail.com", "User")
+[Environment]::SetEnvironmentVariable("TV_ALERT_SMTP_HOST", "smtp.example.com", "User")
 [Environment]::SetEnvironmentVariable("TV_ALERT_SMTP_PORT", "587", "User")
-[Environment]::SetEnvironmentVariable("TV_ALERT_SMTP_USERNAME", "your_email@gmail.com", "User")
+[Environment]::SetEnvironmentVariable("TV_ALERT_SMTP_USERNAME", "sender@example.com", "User")
 [Environment]::SetEnvironmentVariable("TV_ALERT_SMTP_PASSWORD", "your_app_password", "User")
-[Environment]::SetEnvironmentVariable("TV_ALERT_EMAIL_FROM", "your_email@gmail.com", "User")
-[Environment]::SetEnvironmentVariable("TV_ALERT_EMAIL_TO", "jciulla55@gmail.com", "User")
+[Environment]::SetEnvironmentVariable("TV_ALERT_EMAIL_FROM", "sender@example.com", "User")
+[Environment]::SetEnvironmentVariable("TV_ALERT_EMAIL_TO", "destination_email@example.com", "User")
 [Environment]::SetEnvironmentVariable("TV_ALERT_SMTP_USE_TLS", "true", "User")
 ```
 
 Run a dry check:
 
 ```powershell
-cd "C:\Users\ciull\Desktop\Coding Projects\Trading View"
 .\run_alert_check_dry.ps1
 ```
 
-Install the weekday 6:00 PM scheduled task:
+Install the weekday scheduled task locally:
 
 ```powershell
-cd "C:\Users\ciull\Desktop\Coding Projects\Trading View"
 .\install_alert_task.ps1
 ```
 
@@ -125,4 +120,4 @@ If TradingView omits the `symbol` column, name each export after the signal, for
 - ETF basket: `40% VTI`, `25% SPY`, `25% QQQ`, `10% IWM`.
 - Research ranking uses an 8-week tactical exposure window after each trigger so Sharpe, Sortino, and drawdown are comparable across signals.
 
-This is decision-support tooling only. Fidelity execution remains manual.
+This is decision-support tooling only. Broker execution remains manual.

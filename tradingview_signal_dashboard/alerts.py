@@ -116,5 +116,5 @@ def format_alert_email(alerts: list[SignalAlert], config: AppConfig) -> tuple[st
         else:
             sections.append("  Allocation note: positive z-score alert; no buy allocation is generated.")
         sections.append("")
-    sections.append("Execution remains manual in Fidelity.")
+    sections.append("Broker execution remains manual.")
     return subject, "\n".join(sections)

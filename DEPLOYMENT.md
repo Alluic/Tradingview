@@ -1,14 +1,12 @@
 # Deployment
 
-Target repo: `https://github.com/Alluic/Tradingview`
-
 ## Dashboard Hosting
 
 Host the dashboard with Streamlit Community Cloud:
 
-1. Push this project to `Alluic/Tradingview`.
+1. Push this project to your GitHub repository.
 2. Go to `https://share.streamlit.io`.
-3. Create a new app from `Alluic/Tradingview`.
+3. Create a new app from your repository.
 4. Use branch `main`.
 5. Use main file path `app.py`.
 6. Deploy.
@@ -18,7 +16,6 @@ The dashboard builds its own public-data breadth signals on startup if the local
 For local viewing:
 
 ```powershell
-cd "C:\Users\ciull\Desktop\Coding Projects\Trading View"
 streamlit run app.py
 ```
 
@@ -50,7 +47,7 @@ TV_ALERT_SMTP_PORT
 TV_ALERT_SMTP_USERNAME
 TV_ALERT_SMTP_PASSWORD
 TV_ALERT_EMAIL_FROM
-TV_ALERT_EMAIL_TO = jciulla55@gmail.com
+TV_ALERT_EMAIL_TO
 TV_ALERT_SMTP_USE_TLS
 ```
 
@@ -58,14 +55,13 @@ For Gmail, use an app password, not your normal Google account password.
 
 ## Local Push
 
-This machine currently does not have `git` or `gh` available on PATH. After installing Git for Windows, push with:
+To push this project to a new GitHub repository:
 
 ```powershell
-cd "C:\Users\ciull\Desktop\Coding Projects\Trading View"
 git init
 git branch -M main
-git remote add origin https://github.com/Alluic/Tradingview.git
+git remote add origin https://github.com/<owner>/<repo>.git
 git add .
-git commit -m "Initial TradingView signal dashboard"
+git commit -m "Initial market breadth signal dashboard"
 git push -u origin main
 ```
