@@ -70,9 +70,15 @@ def read_prices(conn: duckdb.DuckDBPyConnection, table: str) -> pd.DataFrame:
     if table not in {"signal_prices", "etf_prices"}:
         raise ValueError(f"Unsupported table: {table}")
     frame = conn.execute(f"SELECT * FROM {table} ORDER BY symbol, date").fetchdf()
+    
+    # Ensure date column is properly typed even for empty DataFrames
     if frame.empty:
-        return frame
-    frame["date"] = pd.to_datetime(frame["date"])
+        # Create empty DataFrame with correct column types
+        frame = pd.DataFrame(columns=["date", "symbol", "open", "high", "low", "close", "source_file"])
+        frame["date"] = frame["date"].astype("datetime64[ns]")
+    else:
+        frame["date"] = pd.to_datetime(frame["date"])
+    
     return frame
 
 
