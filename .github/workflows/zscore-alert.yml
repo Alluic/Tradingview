@@ -2,8 +2,8 @@ name: Z-Score Alert
 
 on:
   schedule:
-    # 6:15 PM Eastern during daylight saving time. Adjust to 23:15 UTC during standard time if needed.
-    - cron: "15 22 * * 1-5"
+    # 9:30 AM Eastern market open during daylight saving time. Use 14:30 UTC during standard time.
+    - cron: "30 13 * * 1-5"
   workflow_dispatch:
     inputs:
       dry_run:

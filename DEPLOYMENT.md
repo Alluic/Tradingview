@@ -32,7 +32,7 @@ GitHub Actions workflow:
 .github/workflows/zscore-alert.yml
 ```
 
-It runs weekdays at `22:15 UTC`, which is `6:15 PM Eastern` during daylight saving time. During standard time, change the cron line to `15 23 * * 1-5` if you want the run to remain near 6:15 PM Eastern.
+It runs weekdays at `13:30 UTC`, which is `9:30 AM Eastern` market open during daylight saving time. During standard time, change the cron line to `30 14 * * 1-5` if you want the run to remain at 9:30 AM Eastern.
 
 Alert rules:
 
