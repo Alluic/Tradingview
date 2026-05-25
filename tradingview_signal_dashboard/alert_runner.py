@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+import traceback
 
 from tradingview_signal_dashboard.alerts import format_alert_email, latest_signal_alerts
 from tradingview_signal_dashboard.auto_data import build_auto_breadth_signals
@@ -80,6 +81,7 @@ def main(argv: list[str] | None = None) -> int:
         run_alert_check(send=not args.no_email, dry_run=args.dry_run)
     except Exception as exc:
         print(f"Alert runner failed: {exc}", file=sys.stderr)
+        traceback.print_exc()
         return 1
     return 0
 

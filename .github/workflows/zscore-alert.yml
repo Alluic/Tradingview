@@ -5,6 +5,12 @@ on:
     # 6:15 PM Eastern during daylight saving time. Adjust to 23:15 UTC during standard time if needed.
     - cron: "15 22 * * 1-5"
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Refresh data and print any alert email without sending it"
+        required: true
+        default: true
+        type: boolean
 
 jobs:
   alert:
@@ -23,7 +29,7 @@ jobs:
       - name: Install dependencies
         run: python -m pip install -r requirements.txt
 
-      - name: Refresh data and send alerts
+      - name: Check alert secret presence
         env:
           TV_ALERT_SMTP_HOST: ${{ secrets.TV_ALERT_SMTP_HOST }}
           TV_ALERT_SMTP_PORT: ${{ secrets.TV_ALERT_SMTP_PORT }}
@@ -32,4 +38,42 @@ jobs:
           TV_ALERT_EMAIL_FROM: ${{ secrets.TV_ALERT_EMAIL_FROM }}
           TV_ALERT_EMAIL_TO: ${{ secrets.TV_ALERT_EMAIL_TO }}
           TV_ALERT_SMTP_USE_TLS: ${{ secrets.TV_ALERT_SMTP_USE_TLS }}
-        run: python -m tradingview_signal_dashboard.alert_runner
+        shell: bash
+        run: |
+          missing=0
+          for name in \
+            TV_ALERT_SMTP_HOST \
+            TV_ALERT_SMTP_PORT \
+            TV_ALERT_SMTP_USERNAME \
+            TV_ALERT_SMTP_PASSWORD \
+            TV_ALERT_EMAIL_FROM \
+            TV_ALERT_EMAIL_TO \
+            TV_ALERT_SMTP_USE_TLS
+          do
+            if [ -z "${!name}" ]; then
+              echo "::warning::$name is missing or empty"
+              missing=1
+            else
+              echo "$name is set"
+            fi
+          done
+          if [ "$missing" -eq 1 ]; then
+            echo "One or more email secrets are missing. Dry runs can still refresh data; real sends will fail."
+          fi
+
+      - name: Refresh data and process alerts
+        env:
+          TV_ALERT_SMTP_HOST: ${{ secrets.TV_ALERT_SMTP_HOST }}
+          TV_ALERT_SMTP_PORT: ${{ secrets.TV_ALERT_SMTP_PORT }}
+          TV_ALERT_SMTP_USERNAME: ${{ secrets.TV_ALERT_SMTP_USERNAME }}
+          TV_ALERT_SMTP_PASSWORD: ${{ secrets.TV_ALERT_SMTP_PASSWORD }}
+          TV_ALERT_EMAIL_FROM: ${{ secrets.TV_ALERT_EMAIL_FROM }}
+          TV_ALERT_EMAIL_TO: ${{ secrets.TV_ALERT_EMAIL_TO }}
+          TV_ALERT_SMTP_USE_TLS: ${{ secrets.TV_ALERT_SMTP_USE_TLS }}
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.dry_run }}" = "true" ]; then
+            python -m tradingview_signal_dashboard.alert_runner --dry-run
+          else
+            python -m tradingview_signal_dashboard.alert_runner
+          fi
