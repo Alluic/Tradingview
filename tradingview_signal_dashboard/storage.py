@@ -30,6 +30,15 @@ def initialize(conn: duckdb.DuckDBPyConnection) -> None:
     conn.execute(f"CREATE TABLE IF NOT EXISTS etf_prices ({PRICE_SCHEMA})")
     conn.execute(
         """
+        CREATE TABLE IF NOT EXISTS metadata (
+            key VARCHAR PRIMARY KEY,
+            value VARCHAR,
+            updated_at TIMESTAMP
+        )
+        """
+    )
+    conn.execute(
+        """
         CREATE TABLE IF NOT EXISTS sent_alerts (
             alert_key VARCHAR PRIMARY KEY,
             symbol VARCHAR,
@@ -64,6 +73,30 @@ def upsert_prices(conn: duckdb.DuckDBPyConnection, table: str, prices: pd.DataFr
     conn.execute(f"INSERT INTO {table} SELECT * FROM incoming_prices")
     conn.unregister("incoming_prices")
     return len(frame)
+
+
+def set_metadata(conn: duckdb.DuckDBPyConnection, values: dict[str, object]) -> None:
+    rows = pd.DataFrame(
+        [{"key": str(key), "value": "" if value is None else str(value)} for key, value in values.items()]
+    )
+    if rows.empty:
+        return
+    conn.register("incoming_metadata", rows)
+    conn.execute(
+        """
+        INSERT OR REPLACE INTO metadata
+        SELECT key, value, CURRENT_TIMESTAMP
+        FROM incoming_metadata
+        """
+    )
+    conn.unregister("incoming_metadata")
+
+
+def read_metadata(conn: duckdb.DuckDBPyConnection) -> dict[str, str]:
+    frame = conn.execute("SELECT key, value FROM metadata").fetchdf()
+    if frame.empty:
+        return {}
+    return dict(zip(frame["key"], frame["value"], strict=False))
 
 
 def read_prices(conn: duckdb.DuckDBPyConnection, table: str) -> pd.DataFrame:

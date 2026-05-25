@@ -87,7 +87,7 @@ def latest_signal_alerts(signals: pd.DataFrame, config: AppConfig) -> list[Signa
 
 
 def format_alert_email(alerts: list[SignalAlert], config: AppConfig) -> tuple[str, str]:
-    symbols = ", ".join(f"{alert.symbol} {alert.direction} {alert.threshold:g}σ" for alert in alerts)
+    symbols = ", ".join(f"{alert.symbol} {alert.direction} {alert.threshold:g} sigma" for alert in alerts)
     subject = f"{config.alerts.email_subject_prefix}: {symbols}"
     sections = [
         "Market breadth z-score trigger(s) are active.",

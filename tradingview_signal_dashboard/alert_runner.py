@@ -9,25 +9,50 @@ from tradingview_signal_dashboard.auto_data import build_auto_breadth_signals
 from tradingview_signal_dashboard.config import load_config
 from tradingview_signal_dashboard.emailer import load_email_settings, send_email
 from tradingview_signal_dashboard.market_data import fetch_etf_prices
-from tradingview_signal_dashboard.storage import alert_was_sent, connect, read_prices, record_sent_alert, upsert_prices
+import pandas as pd
+
+from tradingview_signal_dashboard.storage import (
+    alert_was_sent,
+    connect,
+    read_prices,
+    record_sent_alert,
+    set_metadata,
+    upsert_prices,
+)
 
 
 def refresh_market_data() -> tuple[int, int]:
     config = load_config()
     conn = connect(config.database_path)
-    signal_rows = build_auto_breadth_signals(
+    signal_rows, universe = build_auto_breadth_signals(
         moving_average_days=config.signals.moving_average_days,
         start=config.auto_data.start_date,
         end=config.auto_data.end_date,
         max_symbols=config.auto_data.max_universe_symbols,
         chunk_size=config.auto_data.chunk_size,
+        holdings_url=config.auto_data.holdings_url,
+        min_coverage=config.auto_data.min_price_coverage,
     )
     etf_rows = fetch_etf_prices(
         list(config.allocation.etf_weights),
         start=config.auto_data.start_date,
         end=config.auto_data.end_date,
     )
-    return upsert_prices(conn, "signal_prices", signal_rows), upsert_prices(conn, "etf_prices", etf_rows)
+    signal_count = upsert_prices(conn, "signal_prices", signal_rows)
+    etf_count = upsert_prices(conn, "etf_prices", etf_rows)
+    set_metadata(
+        conn,
+        {
+            "universe_source": universe.source,
+            "universe_raw_count": universe.raw_count,
+            "universe_filtered_count": universe.filtered_count,
+            "universe_last_refresh": pd.Timestamp.now(tz="UTC").isoformat(),
+            "auto_data_source": config.auto_data.source,
+            "signal_rows_last_loaded": signal_count,
+            "etf_rows_last_loaded": etf_count,
+        },
+    )
+    return signal_count, etf_count
 
 
 def run_alert_check(send: bool = True, dry_run: bool = False) -> int:

@@ -3,11 +3,13 @@ data_dir: data
 
 auto_data:
   enabled: true
-  source: sp500_wikipedia_yfinance
+  source: ishares_iwv_holdings
   start_date: "2014-01-01"
   end_date: null
-  max_universe_symbols: 250
-  chunk_size: 75
+  max_universe_symbols: null
+  chunk_size: 100
+  min_price_coverage: 0.60
+  holdings_url: "https://www.ishares.com/ch/professionelle-anleger/de/produkte/239714/ishares-russell-3000-etf/1495092304805.ajax?fileType=csv&fileName=IWV_holdings&dataType=fund"
 
 signals:
   default: MMTW
@@ -43,6 +45,10 @@ backtest:
   end_date: null
   execution_lag_days: 1
   research_hold_weeks: 8
+  zscore_thresholds:
+    - 1.0
+    - 1.5
+    - 2.0
   forward_return_weeks:
     - 4
     - 8
@@ -69,7 +75,7 @@ alerts:
     - 1.5
     - 2.0
   send_on_cross_only: true
-  schedule_time: "18:00"
+  schedule_time: "10:00"
   email_subject_prefix: "TradingView Breadth Alert"
   smtp:
     host_env: "TV_ALERT_SMTP_HOST"

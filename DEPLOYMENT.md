@@ -29,7 +29,7 @@ GitHub Actions workflow:
 .github/workflows/zscore-alert.yml
 ```
 
-It runs weekdays at `13:30 UTC`, which is `9:30 AM Eastern` market open during daylight saving time. During standard time, change the cron line to `30 14 * * 1-5` if you want the run to remain at 9:30 AM Eastern.
+It has two weekday cron entries, `14:00 UTC` and `15:00 UTC`, plus a runtime `America/New_York` guard. Only the run that maps to exactly `10:00 AM Eastern` proceeds; manual runs bypass the guard.
 
 Alert rules:
 

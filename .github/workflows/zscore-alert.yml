@@ -2,8 +2,9 @@ name: Z-Score Alert
 
 on:
   schedule:
-    # 9:30 AM Eastern market open during daylight saving time. Use 14:30 UTC during standard time.
-    - cron: "30 13 * * 1-5"
+    # 10:00 AM Eastern. The runtime guard below handles daylight versus standard time.
+    - cron: "0 14 * * 1-5"
+    - cron: "0 15 * * 1-5"
   workflow_dispatch:
     inputs:
       dry_run:
@@ -29,7 +30,14 @@ jobs:
       - name: Install dependencies
         run: python -m pip install -r requirements.txt
 
+      - name: Check 10 AM Eastern schedule guard
+        id: time_guard
+        env:
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+        run: python -m tradingview_signal_dashboard.schedule_guard
+
       - name: Check alert secret presence
+        if: steps.time_guard.outputs.should_run == 'true'
         env:
           TV_ALERT_SMTP_HOST: ${{ secrets.TV_ALERT_SMTP_HOST }}
           TV_ALERT_SMTP_PORT: ${{ secrets.TV_ALERT_SMTP_PORT }}
@@ -62,6 +70,7 @@ jobs:
           fi
 
       - name: Refresh data and process alerts
+        if: steps.time_guard.outputs.should_run == 'true'
         env:
           TV_ALERT_SMTP_HOST: ${{ secrets.TV_ALERT_SMTP_HOST }}
           TV_ALERT_SMTP_PORT: ${{ secrets.TV_ALERT_SMTP_PORT }}

@@ -19,6 +19,12 @@ class SignalBacktestResult:
     basket_returns: pd.Series
 
 
+@dataclass(frozen=True)
+class EventStudyResult:
+    summary: pd.DataFrame
+    events: pd.DataFrame
+
+
 def build_weighted_basket_prices(etf_prices: pd.DataFrame, weights: dict[str, float]) -> pd.Series:
     if etf_prices.empty:
         return pd.Series(dtype=float, name="basket_close")
@@ -200,3 +206,90 @@ def run_signal_backtests(
 
     detail_frame = pd.DataFrame(details)
     return SignalBacktestResult(ranking_frame, detail_frame, zscores, basket_returns)
+
+
+def run_event_study(
+    signals: pd.DataFrame,
+    etf_prices: pd.DataFrame,
+    signal_symbols: list[str] | tuple[str, ...],
+    etf_weights: dict[str, float],
+    zscore_window: int,
+    min_periods: int,
+    thresholds: list[float] | tuple[float, ...],
+    forward_weeks: list[int] | tuple[int, ...],
+) -> EventStudyResult:
+    basket = build_weighted_basket_prices(etf_prices, etf_weights)
+    if basket.empty:
+        empty = pd.DataFrame()
+        return EventStudyResult(empty, empty)
+
+    zscores = add_signal_zscores(signals, window=zscore_window, min_periods=min_periods)
+    events: list[dict[str, float | str | pd.Timestamp]] = []
+
+    for symbol in signal_symbols:
+        signal = (
+            zscores[zscores["symbol"] == symbol]
+            .dropna(subset=["z_score"])
+            .sort_values("date")
+            .copy()
+        )
+        if signal.empty:
+            continue
+
+        signal["previous_z_score"] = signal["z_score"].shift(1)
+        signal = signal.dropna(subset=["previous_z_score"])
+        for threshold in sorted(abs(float(threshold)) for threshold in thresholds):
+            crossing_specs = (
+                ("above", threshold, (signal["z_score"] >= threshold) & (signal["previous_z_score"] < threshold)),
+                ("below", -threshold, (signal["z_score"] <= -threshold) & (signal["previous_z_score"] > -threshold)),
+            )
+            for direction, signed_threshold, mask in crossing_specs:
+                for _, row in signal[mask].iterrows():
+                    execution_date = _next_trading_day(basket.index, row["date"])
+                    if execution_date is None:
+                        continue
+                    event: dict[str, float | str | pd.Timestamp] = {
+                        "symbol": symbol,
+                        "direction": direction,
+                        "threshold": abs(signed_threshold),
+                        "signal_date": pd.Timestamp(row["date"]),
+                        "execution_date": execution_date,
+                        "signal_close": float(row["close"]),
+                        "z_score": float(row["z_score"]),
+                        "previous_z_score": float(row["previous_z_score"]),
+                    }
+                    for weeks in forward_weeks:
+                        event[f"forward_{weeks}w_return"] = _forward_return(basket, execution_date, weeks)
+                    events.append(event)
+
+    event_frame = pd.DataFrame(events)
+    if event_frame.empty:
+        return EventStudyResult(pd.DataFrame(), event_frame)
+
+    summary_rows: list[dict[str, float | str | int | pd.Timestamp]] = []
+    group_columns = ["symbol", "direction", "threshold"]
+    for keys, group in event_frame.groupby(group_columns, sort=True):
+        symbol, direction, threshold = keys
+        for weeks in forward_weeks:
+            column = f"forward_{weeks}w_return"
+            returns = pd.to_numeric(group[column], errors="coerce").dropna()
+            summary_rows.append(
+                {
+                    "symbol": symbol,
+                    "direction": direction,
+                    "threshold": threshold,
+                    "horizon_weeks": int(weeks),
+                    "event_count": int(len(returns)),
+                    "avg_forward_return": float(returns.mean()) if not returns.empty else np.nan,
+                    "median_forward_return": float(returns.median()) if not returns.empty else np.nan,
+                    "win_rate": float((returns > 0).mean()) if not returns.empty else np.nan,
+                    "best_forward_return": float(returns.max()) if not returns.empty else np.nan,
+                    "worst_forward_return": float(returns.min()) if not returns.empty else np.nan,
+                    "latest_signal_date": group["signal_date"].max(),
+                }
+            )
+
+    summary = pd.DataFrame(summary_rows).sort_values(
+        by=["symbol", "direction", "threshold", "horizon_weeks"]
+    )
+    return EventStudyResult(summary.reset_index(drop=True), event_frame.sort_values("signal_date", ascending=False))

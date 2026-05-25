@@ -90,7 +90,7 @@ The scheduled task runs `run_alert_check.ps1`, which sends email only when a new
 
 By default, the app builds its own breadth signals automatically from public market data on first run:
 
-- pulls a stock universe,
+- pulls the current iShares `IWV` holdings universe, with non-equity rows filtered out,
 - downloads historical prices with `yfinance`,
 - computes percent of stocks above 5, 20, 50, 100, 150, and 200-day moving averages,
 - downloads ETF prices for `VTI`, `SPY`, `QQQ`, and `IWM`,
@@ -119,5 +119,6 @@ If TradingView omits the `symbol` column, name each export after the signal, for
 - Email alert thresholds: `+/-1.0`, `+/-1.5`, `+/-2.0` for `MMTW`, `MMFI`, `MMOH`, and `MMTH`.
 - ETF basket: `40% VTI`, `25% SPY`, `25% QQQ`, `10% IWM`.
 - Research ranking uses an 8-week tactical exposure window after each trigger so Sharpe, Sortino, and drawdown are comparable across signals.
+- Event-study backtests summarize `+/-1.0`, `+/-1.5`, and `+/-2.0` z-score crossings over 4, 8, and 12-week forward ETF basket returns.
 
 This is decision-support tooling only. Broker execution remains manual.

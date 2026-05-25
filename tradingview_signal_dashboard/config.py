@@ -19,6 +19,8 @@ class AutoDataConfig:
     end_date: str | None
     max_universe_symbols: int | None
     chunk_size: int
+    min_price_coverage: float
+    holdings_url: str
 
 
 @dataclass(frozen=True)
@@ -34,6 +36,7 @@ class BacktestConfig:
     end_date: str | None
     execution_lag_days: int
     research_hold_weeks: int
+    zscore_thresholds: tuple[float, ...]
     forward_return_weeks: tuple[int, ...]
 
 
@@ -120,6 +123,8 @@ def load_config(path: str | Path = DEFAULT_CONFIG_PATH) -> AppConfig:
                 else int(auto_raw["max_universe_symbols"])
             ),
             chunk_size=int(auto_raw["chunk_size"]),
+            min_price_coverage=float(auto_raw["min_price_coverage"]),
+            holdings_url=str(auto_raw["holdings_url"]),
         ),
         signals=SignalConfig(
             default=str(signal_raw["default"]).upper(),
@@ -137,6 +142,7 @@ def load_config(path: str | Path = DEFAULT_CONFIG_PATH) -> AppConfig:
             end_date=backtest_raw.get("end_date"),
             execution_lag_days=int(backtest_raw["execution_lag_days"]),
             research_hold_weeks=int(backtest_raw["research_hold_weeks"]),
+            zscore_thresholds=tuple(float(threshold) for threshold in backtest_raw["zscore_thresholds"]),
             forward_return_weeks=tuple(int(week) for week in backtest_raw["forward_return_weeks"]),
         ),
         allocation=AllocationConfig(

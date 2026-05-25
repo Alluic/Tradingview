@@ -1,12 +1,22 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import date
+from pathlib import Path
+from urllib.request import Request, urlopen
+import csv
+import re
 
 import pandas as pd
 import yfinance as yf
 
 
-SP500_WIKIPEDIA_URL = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
+IWV_HOLDINGS_URL = (
+    "https://www.ishares.com/ch/professionelle-anleger/de/produkte/239714/"
+    "ishares-russell-3000-etf/1495092304805.ajax?fileType=csv&fileName=IWV_holdings&dataType=fund"
+)
+
+STOCKANALYSIS_IWV_HOLDINGS_URL = "https://stockanalysis.com/etf/iwv/holdings/"
 
 FALLBACK_UNIVERSE = [
     "AAPL",
@@ -61,18 +71,123 @@ FALLBACK_UNIVERSE = [
     "NOW",
 ]
 
+SPECIAL_YAHOO_SYMBOLS = {
+    "BFA": "BF-A",
+    "BRKB": "BRK-B",
+    "BFB": "BF-B",
+    "GEFB": "GEF-B",
+    "HEIA": "HEI-A",
+    "LENB": "LEN-B",
+    "MOGA": "MOG-A",
+    "UHALB": "UHAL-B",
+}
 
-def get_sp500_universe(max_symbols: int | None = None) -> list[str]:
+
+@dataclass(frozen=True)
+class UniverseResult:
+    symbols: list[str]
+    source: str
+    raw_count: int
+    filtered_count: int
+
+
+def _download_text(url: str) -> str:
+    request = Request(
+        url,
+        headers={
+            "User-Agent": "Mozilla/5.0",
+            "Accept": "text/csv,text/html,*/*",
+        },
+    )
+    with urlopen(request, timeout=45) as response:
+        return response.read().decode("utf-8-sig", errors="ignore")
+
+
+def _normalize_yahoo_symbol(symbol: str) -> str | None:
+    clean = str(symbol).strip().upper()
+    if not clean or clean in {"-", "--", "NAN", "NONE"}:
+        return None
+    if clean in SPECIAL_YAHOO_SYMBOLS:
+        return SPECIAL_YAHOO_SYMBOLS[clean]
+    clean = clean.replace(".", "-")
+    clean = re.sub(r"\s+", "-", clean)
+    clean = re.sub(r"[^A-Z0-9-]", "", clean)
+    return clean or None
+
+
+def _is_equity_holding(row: dict[str, str]) -> bool:
+    values = {str(key).strip().lower(): str(value).strip() for key, value in row.items()}
+    ticker = values.get("ticker", values.get("emittententicker", ""))
+    name = values.get("name", values.get("holding name", ""))
+    asset_class = values.get("asset class", values.get("anlageklasse", ""))
+    market = values.get("market", "")
+    security_type = values.get("type", values.get("security type", ""))
+
+    text = " ".join([ticker, name, asset_class, market, security_type]).upper()
+    if not ticker or ticker in {"-", "--"}:
+        return False
+    if asset_class and asset_class.upper() not in {"EQUITY", "AKTIEN"}:
+        return False
+    excluded_terms = ("CASH", "FUTURE", "SWAP", "OPTION", "TREASURY", "COLLATERAL", "CURRENCY")
+    return not any(term in text for term in excluded_terms)
+
+
+def parse_ishares_holdings_csv(content: str) -> list[str]:
+    if "<html" in content[:500].lower():
+        raise ValueError("iShares holdings response was HTML, not CSV")
+
+    lines = content.splitlines()
+    header_index = None
+    for index, line in enumerate(lines):
+        columns = [column.strip().lower() for column in next(csv.reader([line]))]
+        has_ticker = "ticker" in columns or "emittententicker" in columns
+        if has_ticker and ("name" in columns or "holding name" in columns):
+            header_index = index
+            break
+    if header_index is None:
+        raise ValueError("Could not find a ticker header in iShares holdings CSV")
+
+    reader = csv.DictReader(lines[header_index:])
+    symbols: list[str] = []
+    for row in reader:
+        if not row or not _is_equity_holding(row):
+            continue
+        symbol = _normalize_yahoo_symbol(row.get("Ticker", row.get("Emittententicker", "")))
+        if symbol:
+            symbols.append(symbol)
+    return list(dict.fromkeys(symbols))
+
+
+def parse_stockanalysis_iwv_holdings_html(content: str) -> list[str]:
+    body_match = re.search(r"<tbody.*?</tbody>", content, flags=re.IGNORECASE | re.DOTALL)
+    if not body_match:
+        raise ValueError("Could not find IWV holdings table in fallback HTML")
+    symbols = re.findall(r'href="/stocks/([^"/]+)/"[^>]*>\s*([A-Za-z0-9.-]+)\s*</a>', body_match.group(0))
+    normalized = [_normalize_yahoo_symbol(display or path) for path, display in symbols]
+    return [symbol for symbol in dict.fromkeys(normalized) if symbol]
+
+
+def get_iwv_universe(holdings_url: str = IWV_HOLDINGS_URL, max_symbols: int | None = None) -> UniverseResult:
+    source = "ishares_iwv_holdings"
     try:
-        tables = pd.read_html(SP500_WIKIPEDIA_URL)
-        symbols = tables[0]["Symbol"].astype(str).str.replace(".", "-", regex=False).str.upper().tolist()
+        symbols = parse_ishares_holdings_csv(_download_text(holdings_url))
     except Exception:
-        symbols = FALLBACK_UNIVERSE.copy()
+        source = "stockanalysis_iwv_holdings_fallback"
+        try:
+            symbols = parse_stockanalysis_iwv_holdings_html(_download_text(STOCKANALYSIS_IWV_HOLDINGS_URL))
+        except Exception:
+            source = "static_large_cap_fallback"
+            symbols = FALLBACK_UNIVERSE.copy()
 
-    symbols = list(dict.fromkeys(symbols))
+    raw_count = len(symbols)
     if max_symbols is not None:
         symbols = symbols[:max_symbols]
-    return symbols
+    return UniverseResult(
+        symbols=symbols,
+        source=source,
+        raw_count=raw_count,
+        filtered_count=len(symbols),
+    )
 
 
 def _close_from_download(raw: pd.DataFrame, symbols: list[str]) -> pd.DataFrame:
@@ -99,7 +214,7 @@ def fetch_universe_closes(
     symbols: list[str],
     start: str | date,
     end: str | date | None = None,
-    chunk_size: int = 75,
+    chunk_size: int = 100,
 ) -> pd.DataFrame:
     chunks: list[pd.DataFrame] = []
     for offset in range(0, len(symbols), chunk_size):
@@ -126,6 +241,7 @@ def compute_breadth_signals(
     closes: pd.DataFrame,
     moving_average_days: dict[str, int],
     min_coverage: float = 0.6,
+    source: str = "auto_iwv_yfinance",
 ) -> pd.DataFrame:
     rows: list[pd.DataFrame] = []
     valid_counts = closes.notna().sum(axis=1)
@@ -147,7 +263,7 @@ def compute_breadth_signals(
                 "high": pct_above.values,
                 "low": pct_above.values,
                 "close": pct_above.values,
-                "source_file": "auto_sp500_yfinance",
+                "source_file": source,
             }
         ).dropna(subset=["close"])
         rows.append(frame)
@@ -163,9 +279,26 @@ def build_auto_breadth_signals(
     end: str | date | None,
     max_symbols: int | None,
     chunk_size: int,
-) -> pd.DataFrame:
-    universe = get_sp500_universe(max_symbols=max_symbols)
-    closes = fetch_universe_closes(universe, start=start, end=end, chunk_size=chunk_size)
+    holdings_url: str = IWV_HOLDINGS_URL,
+    min_coverage: float = 0.6,
+) -> tuple[pd.DataFrame, UniverseResult]:
+    universe = get_iwv_universe(holdings_url=holdings_url, max_symbols=max_symbols)
+    closes = fetch_universe_closes(universe.symbols, start=start, end=end, chunk_size=chunk_size)
     if closes.empty:
-        return pd.DataFrame(columns=["date", "symbol", "open", "high", "low", "close", "source_file"])
-    return compute_breadth_signals(closes, moving_average_days=moving_average_days)
+        empty = pd.DataFrame(columns=["date", "symbol", "open", "high", "low", "close", "source_file"])
+        return empty, universe
+    return (
+        compute_breadth_signals(
+            closes,
+            moving_average_days=moving_average_days,
+            min_coverage=min_coverage,
+            source=f"auto_{universe.source}",
+        ),
+        universe,
+    )
+
+
+def write_universe_snapshot(output_path: str | Path, universe: UniverseResult) -> None:
+    path = Path(output_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame({"symbol": universe.symbols}).to_csv(path, index=False)

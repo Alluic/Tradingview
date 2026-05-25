@@ -1,6 +1,7 @@
 import pandas as pd
+import numpy as np
 
-from tradingview_signal_dashboard.backtest import run_signal_backtests
+from tradingview_signal_dashboard.backtest import run_event_study, run_signal_backtests
 
 
 def _signal_rows(symbol: str = "MMTW") -> pd.DataFrame:
@@ -58,3 +59,40 @@ def test_backtest_uses_same_etf_basket_and_ranks_active_signal():
     assert mmtw["trigger_count"] > 0
     assert mmfi["status"] == "inactive_no_zscores"
     assert not result.detail.empty
+
+
+def test_event_study_counts_threshold_crossings_once():
+    dates = pd.bdate_range("2020-01-01", periods=900)
+    values = np.full(len(dates), 50.0)
+    values[758] = 50.1
+    values[820:823] = 65.0
+    values[850:853] = 35.0
+    signals = pd.DataFrame(
+        {
+            "date": dates,
+            "symbol": "MMTW",
+            "open": values,
+            "high": values,
+            "low": values,
+            "close": values,
+            "source_file": "test",
+        }
+    )
+
+    result = run_event_study(
+        signals=signals,
+        etf_prices=_etf_rows(),
+        signal_symbols=("MMTW",),
+        etf_weights={"VTI": 0.6, "SPY": 0.4},
+        zscore_window=60,
+        min_periods=60,
+        thresholds=(1.0, 1.5, 2.0),
+        forward_weeks=(4, 8, 12),
+    )
+
+    events = result.events
+    assert set(events["direction"]) == {"above", "below"}
+    assert set(events["threshold"]) == {1.0, 1.5, 2.0}
+    assert len(events[(events["direction"] == "above") & (events["threshold"] == 1.0)]) == 1
+    assert len(events[(events["direction"] == "below") & (events["threshold"] == 1.0)]) == 1
+    assert set(result.summary["horizon_weeks"]) == {4, 8, 12}

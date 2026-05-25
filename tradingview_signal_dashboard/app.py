@@ -7,12 +7,12 @@ import streamlit as st
 
 from tradingview_signal_dashboard.allocation import allocation_preview
 from tradingview_signal_dashboard.auto_data import build_auto_breadth_signals
-from tradingview_signal_dashboard.backtest import run_signal_backtests
+from tradingview_signal_dashboard.backtest import run_event_study, run_signal_backtests
 from tradingview_signal_dashboard.config import load_config
 from tradingview_signal_dashboard.ingest import load_price_csv
 from tradingview_signal_dashboard.market_data import fetch_etf_prices
 from tradingview_signal_dashboard.sample_data import make_sample_etfs, make_sample_signals, write_sample_signal_exports
-from tradingview_signal_dashboard.storage import clear_table, connect, read_prices, symbol_summary, upsert_prices
+from tradingview_signal_dashboard.storage import clear_table, connect, read_metadata, read_prices, set_metadata, symbol_summary, upsert_prices
 
 
 def _format_percent_columns(frame: pd.DataFrame) -> pd.DataFrame:
@@ -23,6 +23,9 @@ def _format_percent_columns(frame: pd.DataFrame) -> pd.DataFrame:
         "max_drawdown",
         "win_rate",
         "avg_forward_return",
+        "median_forward_return",
+        "best_forward_return",
+        "worst_forward_return",
         "exposure_pct",
     ]
     display = frame.copy()
@@ -78,6 +81,29 @@ def _run_cached_backtest(
     )
 
 
+@st.cache_data(show_spinner=False)
+def _run_cached_event_study(
+    signals: pd.DataFrame,
+    etfs: pd.DataFrame,
+    signal_symbols: tuple[str, ...],
+    etf_weights_items: tuple[tuple[str, float], ...],
+    window: int,
+    min_periods: int,
+    thresholds: tuple[float, ...],
+    forward_weeks: tuple[int, ...],
+):
+    return run_event_study(
+        signals=signals,
+        etf_prices=etfs,
+        signal_symbols=signal_symbols,
+        etf_weights=dict(etf_weights_items),
+        zscore_window=window,
+        min_periods=min_periods,
+        thresholds=thresholds,
+        forward_weeks=forward_weeks,
+    )
+
+
 def _upload_prices(label: str, table: str, conn) -> None:
     files = st.file_uploader(label, type=["csv"], accept_multiple_files=True)
     if not files:
@@ -113,12 +139,14 @@ def _load_automated_market_data(conn, config, clear_existing: bool = False) -> t
         clear_table(conn, "signal_prices")
         clear_table(conn, "etf_prices")
 
-    signal_rows = build_auto_breadth_signals(
+    signal_rows, universe = build_auto_breadth_signals(
         moving_average_days=config.signals.moving_average_days,
         start=config.auto_data.start_date,
         end=config.auto_data.end_date,
         max_symbols=config.auto_data.max_universe_symbols,
         chunk_size=config.auto_data.chunk_size,
+        holdings_url=config.auto_data.holdings_url,
+        min_coverage=config.auto_data.min_price_coverage,
     )
     etf_rows = fetch_etf_prices(
         list(config.allocation.etf_weights),
@@ -127,6 +155,18 @@ def _load_automated_market_data(conn, config, clear_existing: bool = False) -> t
     )
     signal_count = upsert_prices(conn, "signal_prices", signal_rows)
     etf_count = upsert_prices(conn, "etf_prices", etf_rows)
+    set_metadata(
+        conn,
+        {
+            "universe_source": universe.source,
+            "universe_raw_count": universe.raw_count,
+            "universe_filtered_count": universe.filtered_count,
+            "universe_last_refresh": pd.Timestamp.now(tz="UTC").isoformat(),
+            "auto_data_source": config.auto_data.source,
+            "signal_rows_last_loaded": signal_count,
+            "etf_rows_last_loaded": etf_count,
+        },
+    )
     st.cache_data.clear()
     return signal_count, etf_count
 
@@ -206,13 +246,19 @@ def _data_manager(conn, config) -> None:
             "This downloads a stock universe, computes percent-above-moving-average breadth signals, "
             "downloads ETF prices, and refreshes the research database."
         )
-        auto_left, auto_right = st.columns(2)
+        metadata = read_metadata(conn)
+        auto_left, auto_mid, auto_right = st.columns(3)
         with auto_left:
-            st.metric("Source", config.auto_data.source)
+            st.metric("Universe source", metadata.get("universe_source", config.auto_data.source))
             st.metric("Universe cap", config.auto_data.max_universe_symbols or "All")
+            st.metric("Minimum coverage", f"{config.auto_data.min_price_coverage:.0%}")
+        with auto_mid:
+            st.metric("Raw holdings", metadata.get("universe_raw_count", "n/a"))
+            st.metric("Active universe", metadata.get("universe_filtered_count", "n/a"))
         with auto_right:
             st.metric("Start date", config.auto_data.start_date)
-            st.metric("ETF basket", ", ".join(config.allocation.etf_weights))
+            st.metric("Last refresh", metadata.get("universe_last_refresh", "n/a"))
+        st.caption(f"ETF basket: {', '.join(config.allocation.etf_weights)}")
         if st.button("Refresh automated market data", type="primary"):
             with st.spinner("Downloading and computing automated market data..."):
                 signal_count, etf_count = _load_automated_market_data(conn, config, clear_existing=True)
@@ -291,6 +337,23 @@ def _load_backtest(conn, config):
     )
 
 
+def _load_event_study(conn, config):
+    signals = read_prices(conn, "signal_prices")
+    etfs = read_prices(conn, "etf_prices")
+    if signals.empty or etfs.empty:
+        return None
+    return _run_cached_event_study(
+        signals,
+        etfs,
+        config.signals.symbols,
+        tuple(config.allocation.etf_weights.items()),
+        config.zscore.window,
+        config.zscore.min_periods,
+        config.backtest.zscore_thresholds,
+        config.backtest.forward_return_weeks,
+    )
+
+
 def _signal_research(conn, config) -> None:
     st.header("Signal Research")
     result = _load_backtest(conn, config)
@@ -304,6 +367,17 @@ def _signal_research(conn, config) -> None:
         st.metric("Best Active Signal", _signal_label(best["symbol"], config), f"Sharpe {best['sharpe']:.2f}" if pd.notna(best["sharpe"]) else "Sharpe n/a")
 
     st.dataframe(_format_percent_columns(_with_signal_description(result.rankings, config)), use_container_width=True, hide_index=True)
+
+    event_study = _load_event_study(conn, config)
+    if event_study is not None and not event_study.summary.empty:
+        st.subheader("Z-Score Event Study")
+        summary = _with_signal_description(event_study.summary, config)
+        st.dataframe(_format_percent_columns(summary), use_container_width=True, hide_index=True)
+
+        st.subheader("Latest Crossings")
+        latest = event_study.events.head(50).copy()
+        latest = _with_signal_description(latest, config)
+        st.dataframe(_format_percent_columns(latest), use_container_width=True, hide_index=True)
 
 
 def _signal_detail(conn, config) -> None:
@@ -395,7 +469,7 @@ def main() -> None:
         ["Data", "Signal Research", "Signal Detail", "Allocation Preview"],
         index=1,
     )
-    st.sidebar.write(f"Trigger: z-score < {config.zscore.trigger_threshold}")
+    st.sidebar.write(f"Allocation: z-score < {config.zscore.trigger_threshold}")
     st.sidebar.write(f"Alerts: {', '.join(f'+/-{threshold:g}' for threshold in config.alerts.zscore_thresholds)}")
     st.sidebar.write(f"Window: {config.zscore.window} trading days")
 
