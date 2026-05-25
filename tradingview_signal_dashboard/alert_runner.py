@@ -40,7 +40,18 @@ def run_alert_check(send: bool = True, dry_run: bool = False) -> int:
     print(f"Updated {signal_count:,} breadth rows and {etf_count:,} ETF rows.")
 
     conn = connect(config.database_path)
-    alerts = latest_signal_alerts(read_prices(conn, "signal_prices"), config)
+    signal_prices = read_prices(conn, "signal_prices")
+    
+    # Validate required columns exist
+    required_columns = ["date", "symbol", "close"]
+    missing = [col for col in required_columns if col not in signal_prices.columns]
+    if missing:
+        raise ValueError(
+            f"Signal prices DataFrame missing required columns: {missing}. "
+            f"Available columns: {list(signal_prices.columns)}"
+        )
+    
+    alerts = latest_signal_alerts(signal_prices, config)
     unsent = [alert for alert in alerts if not alert_was_sent(conn, alert.alert_key)]
 
     if not unsent:
